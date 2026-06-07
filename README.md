@@ -14,12 +14,12 @@ This library provides a pure Go implementation of the authentication flow used b
 ## Installation
 
 ```bash
-go get github.com/bishop-bot/ibgateway-go/auth
+go get github.com/bishop-bot/ibgateway-go
 ```
 
 ## Usage
 
-### Basic Authentication with TOTP
+### Simple Import (Recommended)
 
 ```go
 package main
@@ -28,20 +28,20 @@ import (
     "fmt"
     "log"
     
-    "github.com/bishop-bot/ibgateway-go/auth"
+    "github.com/bishop-bot/ibgateway-go"
 )
 
 func main() {
     // Create authenticator with TOTP second factor
-    authConfig := auth.AuthConfig{
+    authConfig := ibgateway.AuthConfig{
         Username:           "your_username",
         Password:           "your_password",
         BaseURL:            "https://localhost:5000",
-        SecondFactorMethod: auth.TOTP,
+        SecondFactorMethod: ibgateway.TOTP,
         TOTPSecret:         "YOUR_TOTP_SECRET", // e.g., from Google Authenticator
     }
     
-    authenticator, err := auth.NewAuthenticator(authConfig)
+    authenticator, err := ibgateway.NewAuthenticator(authConfig)
     if err != nil {
         log.Fatal(err)
     }
@@ -62,14 +62,25 @@ func main() {
 }
 ```
 
+### Alternative Import
+
+The library can also be imported from the `auth` subpackage:
+
+```go
+import "github.com/bishop-bot/ibgateway-go/auth"
+
+authConfig := auth.AuthConfig{...}
+authenticator, _ := auth.NewAuthenticator(authConfig)
+```
+
 ### Using IB Key Authentication
 
 ```go
-authConfig := auth.AuthConfig{
+authConfig := ibgateway.AuthConfig{
     Username:           "your_username",
     Password:           "your_password",
     BaseURL:            "https://localhost:5000",
-    SecondFactorMethod: auth.IBKeyAndroid, // or auth.IBKeyIOS
+    SecondFactorMethod: ibgateway.IBKeyAndroid, // or ibgateway.IBKeyIOS
     OCRASecret:         "YOUR_OCRA_SECRET",
     OCRAPin:            "YOUR_PIN",
     OCRACounter:        2,
@@ -79,11 +90,11 @@ authConfig := auth.AuthConfig{
 ### Using SMS Authentication
 
 ```go
-authConfig := auth.AuthConfig{
+authConfig := ibgateway.AuthConfig{
     Username:           "your_username",
     Password:           "your_password",
     BaseURL:            "https://localhost:5000",
-    SecondFactorMethod: auth.SMS,
+    SecondFactorMethod: ibgateway.SMS,
 }
 ```
 
@@ -112,10 +123,10 @@ The library supports the following two-factor authentication methods:
 
 | Constant | Description |
 |----------|-------------|
-| `auth.SMS` | SMS-based verification code |
-| `auth.TOTP` | Time-based one-time password (Google Authenticator, etc.) |
-| `auth.IBKeyAndroid` | IB Key on Android device |
-| `auth.IBKeyIOS` | IB Key on iOS device |
+| `ibgateway.SMS` | SMS-based verification code |
+| `ibgateway.TOTP` | Time-based one-time password (Google Authenticator, etc.) |
+| `ibgateway.IBKeyAndroid` | IB Key on Android device |
+| `ibgateway.IBKeyIOS` | IB Key on iOS device |
 
 ## API Reference
 
@@ -157,12 +168,12 @@ Configuration for authentication:
 
 The library provides specific error types:
 
-- `auth.AuthenticationError` - General authentication failures
-- `auth.TwoFactorError` - Two-factor authentication errors
-- `auth.MaxLoginAttemptsError` - Too many failed login attempts
+- `ibgateway.AuthenticationError` - General authentication failures
+- `ibgateway.TwoFactorError` - Two-factor authentication errors
+- `ibgateway.MaxLoginAttemptsError` - Too many failed login attempts
 
 ```go
-if _, ok := err.(*auth.MaxLoginAttemptsError); ok {
+if _, ok := err.(*ibgateway.MaxLoginAttemptsError); ok {
     // Handle max login attempts error
 }
 ```
@@ -179,7 +190,7 @@ token := authenticator.GetSessionToken()
 // (In production, store securely)
 
 // Reuse token in a new session
-session, _ := auth.NewSessionManager("https://localhost:5000")
+session, _ := ibgateway.NewSessionManager("https://localhost:5000")
 session.SetSessionToken(storedToken)
 ```
 
