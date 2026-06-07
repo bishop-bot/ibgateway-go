@@ -193,7 +193,12 @@ func (a *Authenticator) initialize() error {
 	// Set the SBID cookie
 	a.session.SetSBIDCookie()
 
-	// Calculate k
+	// Send INIT request and parse response
+	if err := a.doInitializeStep(); err != nil {
+		return err
+	}
+
+	// Calculate k with the received parameters
 	a.k = a.calculateK()
 
 	return nil
