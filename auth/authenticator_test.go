@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -345,5 +348,92 @@ func TestMaxLoginAttemptsError(t *testing.T) {
 
 	if err.Error() != expected {
 		t.Errorf("MaxLoginAttemptsError.Error() = %v, expected %v", err.Error(), expected)
+	}
+}
+
+// TestDoInitializeStep_NonOKStatusReturnsError pins that a gateway which
+// answers the SRP handshake with an error page produces an error instead of
+// leaving the SRP parameters unset.
+//
+// A 403 error page parses into an empty set of SRP parameters, so the salt
+// stays nil. The subsequent SRP calculation then dereferences that nil salt
+// and panics with a nil pointer dereference.
+func TestDoInitializeStep_NonOKStatusReturnsError(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD></HTML>"))
+	}))
+	defer server.Close()
+
+	a, err := NewAuthenticator(AuthConfig{
+		Username: "user",
+		Password: "password",
+		BaseURL:  server.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewAuthenticator: %v", err)
+	}
+	defer a.Close()
+
+	err = a.doInitializeStep()
+	if err == nil {
+		t.Fatal("expected an error when the gateway returns an error page")
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Errorf("expected the error to mention the status code, got %v", err)
+	}
+}
+
+// TestDoInitializeStep_MissingSaltReturnsError pins that a 200 response
+// that carries no SRP salt is rejected instead of being carried into the
+// SRP calculation, where it would nil-dereference.
+func TestDoInitializeStep_MissingSaltReturnsError(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("<HTML><HEAD><TITLE>Not a challenge</TITLE></HEAD></HTML>"))
+	}))
+	defer server.Close()
+
+	a, err := NewAuthenticator(AuthConfig{
+		Username: "user",
+		Password: "password",
+		BaseURL:  server.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewAuthenticator: %v", err)
+	}
+	defer a.Close()
+
+	err = a.doInitializeStep()
+	if err == nil {
+		t.Fatal("expected an error when the response carries no SRP salt")
+	}
+	if !strings.Contains(err.Error(), "salt") {
+		t.Errorf("expected the error to mention the missing salt, got %v", err)
+	}
+}
+
+// TestAuthenticate_ErrorPageDoesNotPanic is the end-to-end guard: a
+// gateway that answers with an error page must produce an error, never a
+// panic.
+func TestAuthenticate_ErrorPageDoesNotPanic(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD></HTML>"))
+	}))
+	defer server.Close()
+
+	a, err := NewAuthenticator(AuthConfig{
+		Username: "user",
+		Password: "password",
+		BaseURL:  server.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewAuthenticator: %v", err)
+	}
+	defer a.Close()
+
+	if err := a.Authenticate(); err == nil {
+		t.Fatal("expected an error when the gateway returns an error page")
 	}
 }

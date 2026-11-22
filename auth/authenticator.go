@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -228,6 +229,15 @@ func (a *Authenticator) doInitializeStep() error {
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
+	// A non-2xx response means the gateway did not answer the SRP
+	// handshake. It usually returns an HTML error page (a proxy or the
+	// gateway's upstream rejecting the request), which parses into an
+	// empty set of SRP parameters and later nil-dereferences. Fail here
+	// with the status instead.
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("INIT request returned %s: %s", resp.Status, summarizeBody(body))
+	}
+
 	// Parse the response
 	authResp, err := parseResponse(body)
 	if err != nil {
@@ -275,7 +285,31 @@ func (a *Authenticator) doInitializeStep() error {
 	// Recalculate k with new parameters
 	a.k = a.calculateK()
 
+	// The SRP parameters are required for the rest of the handshake. A
+	// missing salt means the response was not an SRP challenge, and
+	// calculating on a nil salt panics with a nil pointer dereference.
+	if a.salt == nil {
+		return fmt.Errorf("INIT response did not contain an SRP salt")
+	}
+	if a.B == nil {
+		return fmt.Errorf("INIT response did not contain an SRP B value")
+	}
+
 	return nil
+}
+
+// summarizeBody returns a short, single-line excerpt of a response body
+// for use in error messages.
+func summarizeBody(body []byte) string {
+	const maxLen = 200
+
+	s := strings.TrimSpace(string(body))
+	// Collapse whitespace so an HTML error page stays on one line.
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
+	}
+	return s
 }
 
 // completeAuthentication completes the authentication flow.
